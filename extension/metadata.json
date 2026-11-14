@@ -1,0 +1,10 @@
+{
+    "uuid": "linux-spaces@zarrx",
+    "name": "Linux Spaces",
+    "description": "macOS-style full screen in a new workspace: a full screen window moves to its own workspace next to its origin and returns when it leaves full screen.",
+    "shell-version": ["46"],
+    "settings-schema": "org.gnome.shell.extensions.linux-spaces",
+    "session-modes": ["user", "unlock-dialog"],
+    "url": "https://github.com/zarrx-dev/linux-spaces",
+    "version": 1
+}

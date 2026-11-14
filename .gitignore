@@ -1,0 +1,5 @@
+scratchpad/
+build/
+*.zip
+node_modules/
+extension/schemas/gschemas.compiled

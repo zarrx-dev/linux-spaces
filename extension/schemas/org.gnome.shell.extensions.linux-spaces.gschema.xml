@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+    <schema id="org.gnome.shell.extensions.linux-spaces" path="/org/gnome/shell/extensions/linux-spaces/">
+        <key name="enabled" type="b">
+            <default>true</default>
+            <summary>Full screen in a new workspace</summary>
+            <description>Move a window to a new workspace when it goes full screen.</description>
+        </key>
+        <key name="maximize-button-fullscreen" type="b">
+            <default>true</default>
+            <summary>Maximize button goes full screen</summary>
+            <description>The title bar maximize button makes the window full screen in a new workspace.</description>
+        </key>
+        <key name="toggle-shortcut" type="as">
+            <default>['&lt;Control&gt;&lt;Super&gt;f']</default>
+            <summary>Toggle shortcut</summary>
+            <description>Shortcut that toggles full screen in a new workspace.</description>
+        </key>
+        <key name="maximize-uses-workspace" type="b">
+            <default>false</default>
+            <summary>Maximize uses a new workspace</summary>
+            <description>Keyboard maximize also moves the window to a new workspace.</description>
+        </key>
+        <key name="excluded-apps" type="as">
+            <default>[]</default>
+            <summary>Excluded apps</summary>
+            <description>App IDs that keep the normal full screen behaviour.</description>
+        </key>
+        <key name="animate" type="b">
+            <default>true</default>
+            <summary>Animate workspace switch</summary>
+            <description>Use the workspace switch animation when entering or leaving full screen.</description>
+        </key>
+        <key name="reveal-top-bar" type="b">
+            <default>true</default>
+            <summary>Reveal top bar in full screen</summary>
+            <description>Resting the pointer at the top edge slides the top bar over a full screen window.</description>
+        </key>
+        <key name="reveal-delay-ms" type="i">
+            <range min="0" max="3000"/>
+            <default>500</default>
+            <summary>Top bar reveal delay</summary>
+            <description>Milliseconds the pointer must rest at the top edge before the top bar appears.</description>
+        </key>
+    </schema>
+</schemalist>
