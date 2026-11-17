@@ -11,9 +11,10 @@ const SHOWN_GRACE_US = 1000 * 1000;
 const FULLSCREEN_GRACE_US = 500 * 1000;
 const KEYBOARD_WINDOW_US = 1000 * 1000;
 
-export class MaximizeToFullscreen {
-    constructor(settings) {
+export class MaximizeToWorkspace {
+    constructor(settings, tracker) {
         this._settings = settings;
+        this._tracker = tracker;
         this._mutterSettings = newMutterSettings();
         this._signals = new SignalTracker();
         this._states = new Map(); // Meta.Window -> state
@@ -43,6 +44,7 @@ export class MaximizeToFullscreen {
         this._signals = null;
         this._states = null;
         this._settings = null;
+        this._tracker = null;
         this._mutterSettings = null;
     }
 
@@ -109,20 +111,25 @@ export class MaximizeToFullscreen {
         if (!st) return;
 
         const isMax = win.get_maximized() === Meta.MaximizeFlags.BOTH;
-        if (!st.wasMaximized && isMax && this._shouldConvert(win, st)) {
-            // Unmaximize first so leaving full screen restores the earlier size.
-            win.unmaximize(Meta.MaximizeFlags.BOTH);
-            win.make_fullscreen();
-        }
+        const changed = st.wasMaximized !== isMax;
         st.wasMaximized = isMax;
+        if (!changed || !this._shouldConvert(win, st)) return;
+
+        if (win.is_fullscreen()) {
+            // A mouse maximize change in full screen (Settings keeps its button) leaves full screen.
+            if (isMax) win.unmaximize(Meta.MaximizeFlags.BOTH);
+            win.unmake_fullscreen();
+            this._tracker.clearMaximized(win);
+        } else if (isMax) {
+            this._tracker.markMaximized(win);
+        }
     }
 
     _shouldConvert(win, st) {
         if (!this._settings.get_boolean('enabled')) return false;
-        if (!this._settings.get_boolean('maximize-button-fullscreen')) return false;
+        if (!this._settings.get_boolean('maximize-button-workspace')) return false;
         if (!isCandidate(win, this._settings)) return false;
         if (!monitorAllowed(win, this._mutterSettings).allowed) return false;
-        if (win.is_fullscreen()) return false;
         const now = GLib.get_monotonic_time();
         if (now - st.shownAt <= SHOWN_GRACE_US) return false;
         if (now - st.lastFullscreenChange <= FULLSCREEN_GRACE_US) return false;

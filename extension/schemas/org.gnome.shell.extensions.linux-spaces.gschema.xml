@@ -6,10 +6,10 @@
             <summary>Full screen in a new workspace</summary>
             <description>Move a window to a new workspace when it goes full screen.</description>
         </key>
-        <key name="maximize-button-fullscreen" type="b">
+        <key name="maximize-button-workspace" type="b">
             <default>true</default>
-            <summary>Maximize button goes full screen</summary>
-            <description>The title bar maximize button makes the window full screen in a new workspace.</description>
+            <summary>Title bar maximize uses a new workspace</summary>
+            <description>Maximizing a window with the title bar button or a double-click moves it, maximized, to a new workspace next to its origin. Alt+F10 keeps normal maximize.</description>
         </key>
         <key name="toggle-shortcut" type="as">
             <default>['&lt;Control&gt;&lt;Super&gt;f']</default>

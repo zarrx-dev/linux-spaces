@@ -10,7 +10,8 @@ GNOME has workspaces and full screen, but they are not linked: full screen just 
 
 - **Full screen in a new workspace.** Going full screen creates a workspace right after the current one and moves the window there with the normal GNOME slide.
 - **Back where it came from.** Leaving full screen moves the window back to its original workspace. GNOME's dynamic workspaces removes the empty one.
-- **Works however full screen starts.** F11 in a browser or video player, the `Ctrl+Super+F` shortcut, or the title bar maximize button (like the green macOS button).
+- **Works however full screen starts.** F11 in a browser or video player, or the `Ctrl+Super+F` shortcut.
+- **Maximize gets its own workspace too.** The title bar maximize button (like the green macOS button) moves the window, maximized, to a new workspace. The app keeps its URL bar and title bar, and the top bar stays visible. Restoring the window sends it back.
 - **Normal maximize stays available.** `Alt+F10` still maximizes in place.
 - **Top bar on hover.** In a full screen workspace, rest the pointer at the top edge and the top bar slides down, like the macOS menu bar.
 - **Native navigation.** Full screen workspaces show in Activities and work with workspace shortcuts and three or four finger swipes.

@@ -1,3 +1,4 @@
+import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { isCandidate, MonitorMode, monitorAllowed, newMutterSettings } from './filters.js';
 import { SignalTracker } from './signals.js';
@@ -17,7 +18,7 @@ const Phase = Object.freeze({
 
 const MOVE_TIMEOUT_MS = 500;
 
-// NEVER call remove_workspace here. An empty full screen workspace is removed by GNOME's dynamic
+// NEVER remove a workspace here. An empty full screen workspace is removed by GNOME's dynamic
 // workspaces once it is inactive. Removing one that still holds a window aborts Mutter.
 export class Tracker {
     constructor(settings) {
@@ -32,6 +33,24 @@ export class Tracker {
             display,
             'window-created',
             this._safe((_d, win) => this._hook(win)),
+        );
+        // The window being dragged by the user; its leave waits until the grab ends.
+        this._grabbed = null;
+        this._signals.connect(
+            display,
+            'grab-op-begin',
+            this._safe((_d, win) => {
+                this._grabbed = win ?? null;
+            }),
+        );
+        this._signals.connect(
+            display,
+            'grab-op-end',
+            this._safe((_d, win) => {
+                const grabbed = win ?? this._grabbed;
+                this._grabbed = null;
+                if (grabbed) this._schedule(grabbed);
+            }),
         );
         const refresh = this._safe(() => this._refreshHints());
         this._signals.connect(manager, 'workspaces-reordered', refresh);
@@ -50,6 +69,22 @@ export class Tracker {
         this._settings = null;
         this._mutterSettings = null;
         this._changeCb = null;
+        this._grabbed = null;
+    }
+
+    // Maximized windows with this mark get their own workspace, like full screen windows.
+    markMaximized(win) {
+        const st = this._states?.get(win);
+        if (!st) return;
+        st.maxMark = true;
+        this._schedule(win);
+    }
+
+    clearMaximized(win) {
+        const st = this._states?.get(win);
+        if (!st) return;
+        st.maxMark = false;
+        this._schedule(win);
     }
 
     getFullscreenWindowOn(workspace) {
@@ -95,6 +130,7 @@ export class Tracker {
             fsWorkspace: null,
             monitorMode: null,
             wait: null,
+            maxMark: false,
             keys: { idle: Symbol('idle'), wait: Symbol('wait') },
         });
 
@@ -102,6 +138,16 @@ export class Tracker {
         s.connect(
             win,
             'notify::fullscreen',
+            this._safe(() => this._schedule(win)),
+        );
+        s.connect(
+            win,
+            'notify::maximized-horizontally',
+            this._safe(() => this._schedule(win)),
+        );
+        s.connect(
+            win,
+            'notify::maximized-vertically',
             this._safe(() => this._schedule(win)),
         );
         s.connect(
@@ -141,9 +187,18 @@ export class Tracker {
         if (!st) return;
         if (st.phase === Phase.ENTERING || st.phase === Phase.LEAVING) return;
 
-        const fullscreen = win.is_fullscreen();
-        if (fullscreen && st.phase === Phase.IDLE) this._enter(win, st);
-        else if (!fullscreen && st.phase === Phase.IN) this._leave(win, st);
+        // The mark only lasts while the window stays fully maximized.
+        if (st.maxMark && win.get_maximized() !== Meta.MaximizeFlags.BOTH) st.maxMark = false;
+
+        const wants = win.is_fullscreen() || st.maxMark;
+        if (wants && st.phase === Phase.IDLE) {
+            this._enter(win, st);
+            if (st.phase === Phase.IDLE) st.maxMark = false; // not allowed, forget the mark
+        } else if (!wants && st.phase === Phase.IN) {
+            // Unmaximizing by dragging the title bar: wait for the grab to end.
+            if (this._grabbed === win) return;
+            this._leave(win, st);
+        }
     }
 
     _enter(win, st) {
@@ -238,6 +293,7 @@ export class Tracker {
         st.fsWorkspace = null;
         st.monitorMode = null;
         st.wait = null;
+        st.maxMark = false;
         this._notifyChange();
     }
 
