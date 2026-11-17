@@ -30,7 +30,6 @@ gsettings set org.gnome.shell disable-user-extensions false
 # D-Bus activated apps (Files and most GNOME apps) take their env from the bus, not the
 # shell. Point them at the nested display, and run without Xwayland so no app can land on
 # the real desktop.
-export LINUX_SPACES_DEBUG=1
 dbus-update-activation-environment WAYLAND_DISPLAY=linux-spaces-0 DISPLAY= GDK_BACKEND=wayland
 MUTTER_DEBUG_DUMMY_MODE_SPECS=1920x1080 gnome-shell --nested --wayland --no-x11 --wayland-display=linux-spaces-0 2>&1 | tee "$STATE/shell.log"
 '

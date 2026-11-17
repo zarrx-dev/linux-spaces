@@ -7,12 +7,7 @@ const POLL_MS = 100;
 const SLIDE_MS = 200;
 const HIDE_DELAY_US = 300 * 1000;
 const PANEL_MARGIN_PX = 2;
-
-// TEMP debug: set LINUX_SPACES_DEBUG=1 (scripts/nested.sh does). Remove before release.
-const DEBUG = GLib.getenv('LINUX_SPACES_DEBUG') === '1';
-// In a nested shell the pointer leaves the window before it reaches y=0, so use a taller zone.
-const EDGE_PX = DEBUG ? 20 : 1;
-const dbg = (...a) => DEBUG && console.log('[linux-spaces][debug]', ...a);
+const EDGE_PX = 1;
 
 export class TopBarReveal {
     constructor(tracker, settings) {
@@ -86,20 +81,6 @@ export class TopBarReveal {
     _evaluate() {
         if (!this._signals) return;
         const want = this._shouldBeActive();
-        dbg(
-            'evaluate want=',
-            want,
-            'setting=',
-            this._settings.get_boolean('reveal-top-bar'),
-            'overview=',
-            Main.overview.visible,
-            'ws=',
-            global.workspace_manager.get_active_workspace_index(),
-            'win=',
-            this._tracker
-                .getFullscreenWindowOn(global.workspace_manager.get_active_workspace())
-                ?.get_title(),
-        );
         if (want === this._active) return;
         this._active = want;
         if (want) {
@@ -139,8 +120,6 @@ export class TopBarReveal {
         if (!monitor) return;
         const [x, y] = global.get_pointer();
         const now = GLib.get_monotonic_time();
-        if (DEBUG && y <= 20 && y !== this._dbgY) dbg('tick y=', y, 'x=', x, 'monY=', monitor.y);
-        this._dbgY = y;
 
         if (!this._revealed) {
             const atEdge =
@@ -173,7 +152,6 @@ export class TopBarReveal {
     // transformed position, and changing them would resize maximized windows on every workspace.
     _reveal() {
         const panel = Main.panel;
-        dbg('reveal panelH=', panel.height, 'boxVisible=', Main.layoutManager.panelBox.visible);
         this._revealed = true;
         Main.layoutManager.panelBox.visible = true;
         panel.remove_all_transitions();
@@ -187,7 +165,6 @@ export class TopBarReveal {
 
     _hide() {
         const panel = Main.panel;
-        dbg('hide');
         this._hiding = true;
         panel.ease({
             translation_y: -panel.height,
@@ -200,7 +177,6 @@ export class TopBarReveal {
     }
 
     _restore() {
-        dbg('restore');
         this._revealed = false;
         this._hiding = false;
         this._edgeSince = 0;
