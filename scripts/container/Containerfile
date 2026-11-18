@@ -1,0 +1,16 @@
+# Minimal Fedora image with a given GNOME Shell, used to run the extension nested.
+# Fedora 39 = GNOME 45, 41 = 47, 42 = 48, 43 = 49.
+ARG FEDORA=41
+FROM registry.fedoraproject.org/fedora:${FEDORA}
+
+# The Cisco openh264 repo mirrors fail often and nothing here needs it.
+RUN dnf -y --disablerepo='fedora-cisco-openh264' install --setopt=install_weak_deps=False --setopt=retries=10 \
+        gnome-shell mutter nautilus gnome-text-editor dbus-daemon dbus-tools \
+        glib2 glib2-devel gsettings-desktop-schemas mesa-dri-drivers \
+        procps-ng which findutils \
+    && (dnf -y install --setopt=install_weak_deps=False ptyxis \
+        || dnf -y install --setopt=install_weak_deps=False gnome-terminal) \
+    && (dnf -y install --setopt=install_weak_deps=False gnome-extensions-app || true) \
+    && dnf clean all
+
+CMD ["gnome-shell", "--version"]
