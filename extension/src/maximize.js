@@ -2,6 +2,7 @@ import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { isMaximized, maximize, unmaximize } from './compat.js';
 import { isCandidate, monitorAllowed, newMutterSettings } from './filters.js';
 import { SignalTracker } from './signals.js';
 
@@ -63,7 +64,7 @@ export class MaximizeToWorkspace {
         if (!win || this._states.has(win)) return;
         const now = GLib.get_monotonic_time();
         this._states.set(win, {
-            wasMaximized: win.get_maximized() === Meta.MaximizeFlags.BOTH,
+            wasMaximized: isMaximized(win),
             shownAt: existing ? now - SHOWN_GRACE_US - 1 : now,
             lastFullscreenChange: 0,
             keyboardUntil: 0,
@@ -110,14 +111,16 @@ export class MaximizeToWorkspace {
         const st = this._states?.get(win);
         if (!st) return;
 
-        const isMax = win.get_maximized() === Meta.MaximizeFlags.BOTH;
+        const isMax = isMaximized(win);
         const changed = st.wasMaximized !== isMax;
         st.wasMaximized = isMax;
         if (!changed || !this._shouldConvert(win, st)) return;
 
         if (win.is_fullscreen()) {
+            // Keyboard changes in full screen are left alone (also with "every maximize" on).
+            if (GLib.get_monotonic_time() < st.keyboardUntil) return;
             // A mouse maximize change in full screen (Settings keeps its button) leaves full screen.
-            if (isMax) win.unmaximize(Meta.MaximizeFlags.BOTH);
+            if (isMax) unmaximize(win);
             win.unmake_fullscreen();
             this._tracker.clearMaximized(win);
         } else if (isMax) {
@@ -127,13 +130,15 @@ export class MaximizeToWorkspace {
 
     _shouldConvert(win, st) {
         if (!this._settings.get_boolean('enabled')) return false;
-        if (!this._settings.get_boolean('maximize-button-workspace')) return false;
+        // "Every maximize" implies the button setting and also covers the keyboard.
+        const every = this._settings.get_boolean('maximize-uses-workspace');
+        if (!every && !this._settings.get_boolean('maximize-button-workspace')) return false;
         if (!isCandidate(win, this._settings)) return false;
         if (!monitorAllowed(win, this._mutterSettings).allowed) return false;
         const now = GLib.get_monotonic_time();
         if (now - st.shownAt <= SHOWN_GRACE_US) return false;
         if (now - st.lastFullscreenChange <= FULLSCREEN_GRACE_US) return false;
-        if (now < st.keyboardUntil) return false;
+        if (!every && now < st.keyboardUntil) return false;
         return true;
     }
 
@@ -141,9 +146,8 @@ export class MaximizeToWorkspace {
         if (!win?.can_maximize()) return;
         const st = this._states?.get(win);
         if (st) st.keyboardUntil = GLib.get_monotonic_time() + KEYBOARD_WINDOW_US;
-        if (win.get_maximized() === Meta.MaximizeFlags.BOTH)
-            win.unmaximize(Meta.MaximizeFlags.BOTH);
-        else win.maximize(Meta.MaximizeFlags.BOTH);
+        if (isMaximized(win)) unmaximize(win);
+        else maximize(win);
     }
 
     _onUnmanaging(win) {

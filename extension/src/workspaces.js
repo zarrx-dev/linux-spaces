@@ -1,4 +1,26 @@
 import Meta from 'gi://Meta';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+
+// Activates ws (focusing win when given). With animate off, the shell's slide is skipped by
+// answering false to _shouldAnimate for this call only (the switch runs synchronously inside it).
+export function activateWorkspace(ws, win, animate) {
+    const time = global.get_current_time();
+    const run = () => (win ? ws.activate_with_focus(win, time) : ws.activate(time));
+    const wm = Main.wm;
+    if (animate || typeof wm?._shouldAnimate !== 'function') {
+        run();
+        return;
+    }
+    const hadOwn = Object.hasOwn(wm, '_shouldAnimate');
+    const original = wm._shouldAnimate;
+    wm._shouldAnimate = () => false;
+    try {
+        run();
+    } finally {
+        if (hadOwn) wm._shouldAnimate = original;
+        else delete wm._shouldAnimate;
+    }
+}
 
 // append + reorder instead of Main.wm.insertWorkspace: insertWorkspace moves every later
 // window one workspace up, which Tiling Shell reacts to.

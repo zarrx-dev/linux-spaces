@@ -1,8 +1,11 @@
+import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { isMaximized } from './compat.js';
 import { isCandidate, MonitorMode, monitorAllowed, newMutterSettings } from './filters.js';
 import { SignalTracker } from './signals.js';
 import {
+    activateWorkspace,
     createWorkspaceAfter,
     fallbackWorkspace,
     isAloneOn,
@@ -17,6 +20,10 @@ const Phase = Object.freeze({
 });
 
 const MOVE_TIMEOUT_MS = 500;
+// Monitor checks wait this long so an unplug can finish moving windows around first.
+const MONITOR_SETTLE_MS = 300;
+// Only some Mutter versions emit Meta.Window monitor-changed; window-entered-monitor covers the rest.
+const HAS_MONITOR_CHANGED = GObject.signal_lookup('monitor-changed', Meta.Window.$gtype) !== 0;
 
 // NEVER remove a workspace here. An empty full screen workspace is removed by GNOME's dynamic
 // workspaces once it is inactive. Removing one that still holds a window aborts Mutter.
@@ -57,6 +64,31 @@ export class Tracker {
         this._signals.connect(manager, 'workspace-removed', refresh);
         this._signals.connect(manager, 'workspace-added', refresh);
 
+        this._signals.connect(
+            display,
+            'window-entered-monitor',
+            this._safe((_d, _index, win) => this._onMonitorChanged(win)),
+        );
+        // FR-22: while monitors are being added or removed, no link is dropped; every tracked
+        // window is checked once things have settled.
+        this._settling = false;
+        this._settleKey = Symbol('monitors-settle');
+        this._signals.connect(
+            Main.layoutManager,
+            'monitors-changed',
+            this._safe(() => {
+                this._settling = true;
+                this._signals.timeout(
+                    this._settleKey,
+                    MONITOR_SETTLE_MS,
+                    this._safe(() => {
+                        this._settling = false;
+                        for (const win of this._states.keys()) this._checkMonitor(win);
+                    }),
+                );
+            }),
+        );
+
         for (const actor of global.get_window_actors()) this._hook(actor.meta_window);
     }
 
@@ -70,6 +102,7 @@ export class Tracker {
         this._mutterSettings = null;
         this._changeCb = null;
         this._grabbed = null;
+        this._settling = false;
     }
 
     // Maximized windows with this mark get their own workspace, like full screen windows.
@@ -131,7 +164,7 @@ export class Tracker {
             monitorMode: null,
             wait: null,
             maxMark: false,
-            keys: { idle: Symbol('idle'), wait: Symbol('wait') },
+            keys: { idle: Symbol('idle'), wait: Symbol('wait'), monitor: Symbol('monitor') },
         });
 
         const s = this._signals;
@@ -160,11 +193,13 @@ export class Tracker {
             'workspace-changed',
             this._safe(() => this._onWorkspaceChanged(win)),
         );
-        s.connect(
-            win,
-            'monitor-changed',
-            this._safe(() => this._onMonitorChanged(win)),
-        );
+        if (HAS_MONITOR_CHANGED) {
+            s.connect(
+                win,
+                'monitor-changed',
+                this._safe(() => this._onMonitorChanged(win)),
+            );
+        }
         s.connect(
             win,
             'unmanaging',
@@ -188,7 +223,7 @@ export class Tracker {
         if (st.phase === Phase.ENTERING || st.phase === Phase.LEAVING) return;
 
         // The mark only lasts while the window stays fully maximized.
-        if (st.maxMark && win.get_maximized() !== Meta.MaximizeFlags.BOTH) st.maxMark = false;
+        if (st.maxMark && !isMaximized(win)) st.maxMark = false;
 
         const wants = win.is_fullscreen() || st.maxMark;
         if (wants && st.phase === Phase.IDLE) {
@@ -230,7 +265,7 @@ export class Tracker {
         const fs = createWorkspaceAfter(origin);
         st.fsWorkspace = fs;
         this._waitMove(win, st, fs, () => {
-            fs.activate_with_focus(win, global.get_current_time());
+            activateWorkspace(fs, win, this._settings.get_boolean('animate'));
             st.phase = Phase.IN;
             this._notifyChange();
             this._schedule(win);
@@ -252,7 +287,7 @@ export class Tracker {
 
         st.phase = Phase.LEAVING;
         this._waitMove(win, st, target, () => {
-            target.activate_with_focus(win, global.get_current_time());
+            activateWorkspace(target, win, this._settings.get_boolean('animate'));
             this._drop(st);
             this._schedule(win);
         });
@@ -288,6 +323,7 @@ export class Tracker {
 
     _drop(st) {
         this._signals.cancel(st.keys.wait);
+        this._signals.cancel(st.keys.monitor);
         st.phase = Phase.IDLE;
         st.origin = null;
         st.fsWorkspace = null;
@@ -308,12 +344,25 @@ export class Tracker {
         if (st.phase === Phase.IN && win.get_workspace() !== st.fsWorkspace) this._drop(st);
     }
 
+    // Deferred and idempotent: signals may fire twice and arrive mid unplug.
     _onMonitorChanged(win) {
         const st = this._states?.get(win);
         if (!st || st.phase !== Phase.IN) return;
+        this._signals.timeout(
+            st.keys.monitor,
+            MONITOR_SETTLE_MS,
+            this._safe(() => this._checkMonitor(win)),
+        );
+    }
+
+    _checkMonitor(win) {
+        const st = this._states?.get(win);
+        if (!st || st.phase !== Phase.IN || this._settling) return; // the settle pass re-checks
+        const monitor = win.get_monitor();
         if (
             st.monitorMode === MonitorMode.PRIMARY_ONLY &&
-            win.get_monitor() !== Main.layoutManager.primaryIndex
+            monitor >= 0 &&
+            monitor !== Main.layoutManager.primaryIndex
         ) {
             this._drop(st);
         }
@@ -336,13 +385,14 @@ export class Tracker {
                 this._safe(() => {
                     const target =
                         origin && workspaceStillExists(origin) ? origin : fallbackWorkspace(hint);
-                    target.activate(global.get_current_time());
+                    activateWorkspace(target, null, this._settings?.get_boolean('animate') ?? true);
                 }),
             );
         }
 
         this._signals.cancel(st.keys.idle);
         this._signals.cancel(st.keys.wait);
+        this._signals.cancel(st.keys.monitor);
         this._signals.disconnectObject(win);
         this._states.delete(win);
         this._notifyChange();
